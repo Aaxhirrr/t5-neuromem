@@ -1,0 +1,61 @@
+﻿<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>T5-NeuroMem Demo</title>
+<style>
+body{font-family:system-ui,Segoe UI,Arial;margin:24px;max-width:880px}
+.card{border:1px solid #ddd;border-radius:12px;padding:16px;margin:12px 0}
+.btn{padding:10px 14px;border-radius:8px;border:1px solid #333;background:#111;color:#fff;cursor:pointer}
+input,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid #ccc}
+small{color:#666}
+pre{white-space:pre-wrap;word-wrap:break-word}
+</style>
+</head>
+<body>
+<h2>T5-NeuroMem — Local Demo</h2>
+<div class="card">
+  <label>Question</label>
+  <input id="q" placeholder="Ask something..." value="what is T5 and LoRA?"/>
+  <div style="display:flex;gap:8px;margin:10px 0">
+    <label>alpha <input id="alpha" type="number" step="0.1" min="0" max="1" value="0.5" style="width:80px"/></label>
+    <label>k <input id="k" type="number" min="1" max="10" value="3" style="width:60px"/></label>
+    <button class="btn" onclick="ask()">Ask</button>
+  </div>
+  <small id="lat"></small>
+</div>
+<div id="out" class="card"></div>
+<div class="card">
+  <h4>Ingest memory</h4>
+  <textarea id="mem" rows="4" placeholder="Paste a paragraph to remember..."></textarea>
+  <div style="display:flex;gap:8px;margin-top:8px">
+    <input id="docid" placeholder="doc_id (optional)" style="width:200px"/>
+    <button class="btn" onclick="ingest()">Add</button>
+  </div>
+  <small>After ingest, PageRank is recomputed automatically.</small>
+</div>
+<script>
+async function ask(){
+  const t0 = performance.now();
+  const r = await fetch("/predict",{method:"POST",headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({text:document.getElementById("q").value, alpha: parseFloat(alpha.value), k: parseInt(k.value)})});
+  const j = await r.json();
+  const t1 = performance.now();
+  document.getElementById("lat").textContent = "latency: " + Math.round(t1-t0) + " ms";
+  let html = "<b>Answer</b><pre>"+(j.answer||"")+"</pre><b>Citations</b><pre>"+(j.citations||[]).join("\\n")+"</pre>";
+  html += "<b>Top chunks</b><pre>"+JSON.stringify(j.chunks,null,2)+"</pre>";
+  document.getElementById("out").innerHTML = html;
+}
+async function ingest(){
+  const text = document.getElementById("mem").value.trim();
+  if(!text){ alert("Paste some text"); return; }
+  const doc = document.getElementById("docid").value.trim() || "local";
+  const r = await fetch("/ingest",{method:"POST",headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({items:[{text, doc_id:doc}]})});
+  const j = await r.json();
+  alert("Ingested: "+j.ingested+" | total: "+j.total_chunks);
+}
+</script>
+</body>
+</html>
