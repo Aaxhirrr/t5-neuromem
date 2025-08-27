@@ -1,24 +1,9 @@
-# virtual environments
 .venv/
-venv/
-
-# python cache
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# notebooks checkpoints
-.ipynb_checkpoints/
-
-# VS Code settings
-.vscode/
-
-# env files
-.env
-*.env
-
-# build artifacts
-*.egg-info/
-dist/
-build/
+**/__pycache__/
+telemetry/
+*.ndjson
+*.log
+*.tmp
+*.ipynb_checkpoints/
+**/cache/
+**/.cache/

@@ -1,58 +1,53 @@
-﻿# app/inference.py
-"""
-Model/inference stubs for local dev.
+﻿from typing import List, Dict
+import torch
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
-- load_model(path) is a no-op now (keeps API parity).
-- generate(prompt, chunks) composes a basic response and lists citations.
-Replace generate() with actual model.generate(...) when you add T5+PEFT.
-"""
-from typing import Any, Dict, List, Optional
-
+_MODEL_NAME = "t5-small"
+_tokenizer = None
 _model = None
+_device = "cuda" if torch.cuda.is_available() else "cpu"
 
+def _load():
+    global _tokenizer, _model
+    if _tokenizer is None or _model is None:
+        _tokenizer = AutoTokenizer.from_pretrained(_MODEL_NAME)
+        _model = AutoModelForSeq2SeqLM.from_pretrained(_MODEL_NAME)
+        _model.to(_device)
+        _model.eval()
 
-def load_model(path: Optional[str] = None) -> None:
-    """Stub loader. Replace with real model+adapter load."""
-    global _model
-    _model = {"loaded": True, "path": path}
-
-
-def _build_prompt(query: str, chunks: List[Dict]) -> str:
-    """Compose an input prompt that would be fed to the T5 model."""
-    prompt_parts = [f"Query: {query}", "", "Memory chunks (most relevant first):"]
-    for i, c in enumerate(chunks, start=1):
-        prompt_parts.append(f"[{i}] ({c.get('chunk_id')}) {c.get('text')}")
-    prompt_parts.append("")
-    prompt_parts.append(
-        "Answer (synthesize above memories and answer the query; include citations like [1],[2]):"
+def build_prompt(query: str, chunks: List[Dict], max_chars_per_chunk: int = 600, max_chunks: int = 5) -> str:
+    use = chunks[:max_chunks]
+    lines = []
+    for c in use:
+        txt = (c.get("text") or "")[:max_chars_per_chunk]
+        cid = c.get("chunk_id") or ""
+        lines.append(f"[{cid}] {txt}")
+    ctx = "\n".join(lines)
+    prompt = (
+        "You are a helpful assistant. Use ONLY the context to answer.\n"
+        "Write 2-4 concise sentences. Include bracketed citations like [chunk_id] after facts.\n"
+        f"Question: {query}\n\nContext:\n{ctx}\n\nAnswer:"
     )
-    return "\n".join(prompt_parts)
+    return prompt
 
+@torch.inference_mode()
+def generate_answer(query: str, chunks: List[Dict], max_input_tokens: int = 512, max_new_tokens: int = 128) -> str:
+    _load()
+    prompt = build_prompt(query, chunks)
+    enc = _tokenizer(prompt, return_tensors="pt", truncation=True, max_length=min(max_input_tokens, 512)).to(_device)
+    try:
+        ids = _model.generate(
+            **enc,
+            max_new_tokens=max_new_tokens,
+            num_beams=3,
+            no_repeat_ngram_size=3,
+            do_sample=False,
+            early_stopping=True,
+        )
+    except Exception:
+        ids = _model.generate(**enc, max_new_tokens=min(64, max_new_tokens))
+    return _tokenizer.decode(ids[0], skip_special_tokens=True)
 
-def generate(
-    query: str, chunks: List[Dict], max_new_tokens: int = 128
-) -> Dict[str, Any]:
-    """
-    Stubbed generate:
-      - builds a prompt from query + chunks
-      - returns a dict with 'answer' and 'citations' keys
-    Replace with actual model inference when ready.
-    """
-    if _model is None:
-        load_model()
-
-    prompt = _build_prompt(query, chunks)
-    # naive deterministic answer for demo:
-    if chunks:
-        # use the first chunk's short snippet as the core of the reply
-        core = chunks[0]["text"]
-        citations = [c["chunk_id"] for c in chunks]
-        answer = f"[generated synthesis] Using memory: \"{core[:200]}\" ... (see citations: {', '.join(citations)})"
-    else:
-        answer = "[generated] I don't find matching memory chunks. Try rephrasing or ingesting documents."
-
-    return {
-        "answer": answer,
-        "prompt": prompt,
-        "citations": citations if chunks else [],
-    }
+def count_tokens(text: str) -> int:
+    _load()
+    return len(_tokenizer.encode(text))
