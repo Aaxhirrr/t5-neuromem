@@ -15,4 +15,5 @@ Think of it as a T5 that doesn’t forget: retrieval + reasoning + memory.
 
 ### 📂 Repo Structure
 
-ON HOLD AS I AM PARTICIPATING IN THE GKE TURNS 10 !
+ON HOLD AS I AM PARTICIPATING IN THE GKE TURNS 10 by google !
+
